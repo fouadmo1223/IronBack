@@ -1,0 +1,123 @@
+import { RoleKey } from '../enums';
+
+/**
+ * Granular permission catalog. Guards check these strings, never role names.
+ * Keep values stable — they are persisted on Role documents and seeded.
+ */
+export const PERMISSIONS = {
+  MEMBER_READ: 'member.read',
+  MEMBER_CREATE: 'member.create',
+  MEMBER_UPDATE: 'member.update',
+  MEMBER_DELETE: 'member.delete',
+
+  SUBSCRIPTION_READ: 'subscription.read',
+  SUBSCRIPTION_CREATE: 'subscription.create',
+  SUBSCRIPTION_UPDATE: 'subscription.update',
+  SUBSCRIPTION_CANCEL: 'subscription.cancel',
+  SUBSCRIPTION_FREEZE: 'subscription.freeze',
+
+  PLAN_READ: 'plan.read',
+  PLAN_CREATE: 'plan.create',
+  PLAN_UPDATE: 'plan.update',
+  PLAN_DELETE: 'plan.delete',
+
+  PAYMENT_READ: 'payment.read',
+  PAYMENT_CREATE: 'payment.create',
+  PAYMENT_REVIEW: 'payment.review',
+  PAYMENT_APPROVE: 'payment.approve',
+  PAYMENT_REJECT: 'payment.reject',
+  PAYMENT_MARK_FAKE: 'payment.mark_fake',
+  PAYMENT_REFUND: 'payment.refund',
+
+  ATTENDANCE_READ: 'attendance.read',
+  ATTENDANCE_CREATE: 'attendance.create',
+  ACCESS_SCAN: 'access.scan',
+
+  WHATSAPP_SEND: 'whatsapp.send',
+  NOTIFICATIONS_SEND: 'notifications.send',
+
+  REPORTS_READ: 'reports.read',
+  DASHBOARD_READ: 'dashboard.read',
+
+  CMS_READ: 'cms.read',
+  CMS_UPDATE: 'cms.update',
+  MEDIA_MANAGE: 'media.manage',
+
+  BRANCH_MANAGE: 'branch.manage',
+  STAFF_MANAGE: 'staff.manage',
+  ROLES_MANAGE: 'roles.manage',
+  SETTINGS_MANAGE: 'settings.manage',
+  AUDIT_READ: 'audit.read',
+} as const;
+
+export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+export const ALL_PERMISSIONS: PermissionKey[] = Object.values(PERMISSIONS);
+
+const READ_ONLY_OPERATIONS: PermissionKey[] = [
+  PERMISSIONS.MEMBER_READ,
+  PERMISSIONS.SUBSCRIPTION_READ,
+  PERMISSIONS.PLAN_READ,
+  PERMISSIONS.PAYMENT_READ,
+  PERMISSIONS.ATTENDANCE_READ,
+  PERMISSIONS.REPORTS_READ,
+  PERMISSIONS.DASHBOARD_READ,
+  PERMISSIONS.CMS_READ,
+  PERMISSIONS.AUDIT_READ,
+];
+
+/** Default permission grants per seeded role. */
+export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, PermissionKey[]> = {
+  [RoleKey.SUPER_ADMIN]: [...ALL_PERMISSIONS],
+  [RoleKey.ADMIN]: ALL_PERMISSIONS.filter(
+    (p) => p !== PERMISSIONS.ROLES_MANAGE && p !== PERMISSIONS.SETTINGS_MANAGE,
+  ),
+  [RoleKey.MANAGER]: [
+    ...READ_ONLY_OPERATIONS,
+    PERMISSIONS.MEMBER_CREATE,
+    PERMISSIONS.MEMBER_UPDATE,
+    PERMISSIONS.SUBSCRIPTION_CREATE,
+    PERMISSIONS.SUBSCRIPTION_UPDATE,
+    PERMISSIONS.SUBSCRIPTION_CANCEL,
+    PERMISSIONS.SUBSCRIPTION_FREEZE,
+    PERMISSIONS.PLAN_CREATE,
+    PERMISSIONS.PLAN_UPDATE,
+    PERMISSIONS.PAYMENT_REVIEW,
+    PERMISSIONS.PAYMENT_APPROVE,
+    PERMISSIONS.PAYMENT_REJECT,
+    PERMISSIONS.ATTENDANCE_CREATE,
+    PERMISSIONS.ACCESS_SCAN,
+    PERMISSIONS.WHATSAPP_SEND,
+    PERMISSIONS.NOTIFICATIONS_SEND,
+    PERMISSIONS.CMS_UPDATE,
+    PERMISSIONS.MEDIA_MANAGE,
+  ],
+  [RoleKey.RECEPTIONIST]: [
+    PERMISSIONS.MEMBER_READ,
+    PERMISSIONS.MEMBER_CREATE,
+    PERMISSIONS.MEMBER_UPDATE,
+    PERMISSIONS.SUBSCRIPTION_READ,
+    PERMISSIONS.SUBSCRIPTION_CREATE,
+    PERMISSIONS.PLAN_READ,
+    PERMISSIONS.PAYMENT_READ,
+    PERMISSIONS.PAYMENT_CREATE,
+    PERMISSIONS.ATTENDANCE_READ,
+    PERMISSIONS.ATTENDANCE_CREATE,
+    PERMISSIONS.ACCESS_SCAN,
+    PERMISSIONS.WHATSAPP_SEND,
+    PERMISSIONS.DASHBOARD_READ,
+  ],
+  [RoleKey.ACCOUNTANT]: [
+    PERMISSIONS.MEMBER_READ,
+    PERMISSIONS.SUBSCRIPTION_READ,
+    PERMISSIONS.PLAN_READ,
+    PERMISSIONS.PAYMENT_READ,
+    PERMISSIONS.PAYMENT_REVIEW,
+    PERMISSIONS.PAYMENT_APPROVE,
+    PERMISSIONS.PAYMENT_REJECT,
+    PERMISSIONS.PAYMENT_MARK_FAKE,
+    PERMISSIONS.PAYMENT_REFUND,
+    PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.DASHBOARD_READ,
+  ],
+};

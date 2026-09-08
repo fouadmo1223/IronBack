@@ -304,9 +304,42 @@ async function run() {
               { valueEn: '119', labelEn: 'Open hours / week', labelAr: 'ساعة أسبوعيًا' },
             ],
           } },
-          { key: 'plans', type: 'MEMBERSHIP_PLANS', enabled: true, order: 2, data: {} },
-          { key: 'cta', type: 'CTA', enabled: true, order: 3, data: {
+          { key: 'about', type: 'ABOUT_PREVIEW', enabled: true, order: 2, data: {
+            kickerEn: 'The gym', kickerAr: 'النادي',
+            titleEn: 'No noise. Just the work.', titleAr: 'بلا ضجيج. فقط العمل.',
+            bodyEn: 'We opened with one idea — a serious floor without the fluff.',
+            bodyAr: 'بدأنا بفكرة واحدة — صالة جادة بلا زيادات.',
+          } },
+          { key: 'plans', type: 'MEMBERSHIP_PLANS', enabled: true, order: 3, data: {
+            titleEn: 'One standard. Pick your commitment.', titleAr: 'مستوى واحد. اختر التزامك.',
+          } },
+          { key: 'why', type: 'WHY_US', enabled: true, order: 4, data: {
+            titleEn: 'Why Iron Gym', titleAr: 'لماذا آيرون جيم',
+          } },
+          { key: 'experience', type: 'TRAINING_EXPERIENCE', enabled: true, order: 5, data: {
+            kickerEn: 'How it works', kickerAr: 'كيف تسير الأمور',
+            titleEn: 'The training experience', titleAr: 'تجربة التدريب',
+          } },
+          { key: 'testimonials', type: 'TESTIMONIALS', enabled: true, order: 6, data: {
+            titleEn: 'What members say', titleAr: 'ماذا يقول الأعضاء',
+            items: [
+              { nameEn: 'Karim · 3 years', quoteEn: "First gym where nobody's waiting for a rack.", quoteAr: 'أول نادٍ لا أنتظر فيه على أي جهاز.' },
+              { nameEn: 'Nour · 2 years', quoteEn: 'Added 40kg to my total in a year.', quoteAr: 'زدت ٤٠ كجم على مجموعي خلال سنة.' },
+            ],
+          } },
+          { key: 'faq', type: 'FAQ', enabled: true, order: 7, data: {
+            titleEn: 'Questions', titleAr: 'أسئلة',
+            items: [
+              { questionEn: 'Do I need experience to join?', questionAr: 'هل أحتاج خبرة للاشتراك؟',
+                answerEn: 'No. Every membership starts with an assessment.', answerAr: 'لا. كل اشتراك يبدأ بتقييم.' },
+            ],
+          } },
+          { key: 'cta', type: 'CTA', enabled: true, order: 8, data: {
             titleEn: 'Your first session is on us', titleAr: 'جلستك الأولى علينا',
+          } },
+          { key: 'location', type: 'LOCATION', enabled: true, order: 9, data: {
+            titleEn: 'Downtown Cairo', titleAr: 'وسط القاهرة',
+            addressEn: 'Tahrir St., Downtown, Cairo', addressAr: 'شارع التحرير، وسط البلد، القاهرة',
           } },
         ],
       },

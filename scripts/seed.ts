@@ -313,7 +313,46 @@ async function run() {
     },
     { upsert: true },
   );
-  console.log('  · site + home');
+
+  await cmsPageModel.findOneAndUpdate(
+    { slug: 'trainers' },
+    {
+      $set: {
+        slug: 'trainers', nameEn: 'Trainers', nameAr: 'المدربون',
+        isPublished: true, publishedAt: new Date(),
+        sections: [
+          {
+            key: 'roster', type: 'TRAINERS', enabled: true, order: 0,
+            data: {
+              titleEn: 'The coaching staff', titleAr: 'طاقم التدريب',
+              items: [
+                { nameEn: 'Omar Khaled', specEn: 'Powerlifting', specAr: 'رفع القوة',
+                  bioEn: 'National-level lifter. Programs strength blocks and meet prep.',
+                  bioAr: 'رافع على مستوى بطولات. يعدّ بلوكات القوة والتحضير للمنافسات.' },
+                { nameEn: 'Yousef Amin', specEn: 'Hypertrophy', specAr: 'تضخيم العضلات',
+                  bioEn: 'Physique coach focused on structured volume and technique.',
+                  bioAr: 'مدرب فيزيك يركّز على الحجم المنظّم والتقنية.' },
+                { nameEn: 'Tarek Nabil', specEn: 'Olympic lifting', specAr: 'الرفع الأولمبي',
+                  bioEn: 'Snatch and clean & jerk technique, from first pull to overhead.',
+                  bioAr: 'تقنية السناتش والكلين آند جيرك من أول سحبة حتى فوق الرأس.' },
+                { nameEn: 'Kareem Adel', specEn: 'Strength & conditioning', specAr: 'قوة ولياقة',
+                  bioEn: 'CSCS. Builds athletic bases for team-sport members.',
+                  bioAr: 'حاصل على CSCS. يبني قواعد بدنية لأعضاء الرياضات الجماعية.' },
+                { nameEn: 'Hassan Fathy', specEn: 'Mobility & rehab', specAr: 'المرونة والتأهيل',
+                  bioEn: 'Physio background. Return-to-training and movement work.',
+                  bioAr: 'خلفية علاج طبيعي. العودة للتدريب والعمل على الحركة.' },
+                { nameEn: 'Mostafa Zaki', specEn: 'Conditioning', specAr: 'اللياقة',
+                  bioEn: 'Engine work that carries over — intervals, carries, erg, sled.',
+                  bioAr: 'عمل هوائي له مردود — فترات، حمل، إرغ، سِلد.' },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    { upsert: true },
+  );
+  console.log('  · site + home + trainers');
 
   console.log('\n▸ Seeding demo member…');
   {

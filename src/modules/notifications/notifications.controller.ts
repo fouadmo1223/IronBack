@@ -1,6 +1,15 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsArray, IsMongoId, IsString, MinLength } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsIn,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 import {
   CurrentUser,
   ParseObjectIdPipe,
@@ -11,21 +20,32 @@ import { PERMISSIONS } from '../../common/constants/permissions';
 import { NotificationType } from '../../common/enums';
 import { AuthenticatedUser } from '../../common/types';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, type BroadcastAudience } from './notifications.service';
+
+const BROADCAST_TYPES = [
+  NotificationType.ANNOUNCEMENT,
+  NotificationType.PROMOTION,
+  NotificationType.SYSTEM,
+] as const;
 
 class BroadcastDto {
+  @IsIn(['all', 'members', 'staff', 'custom'])
+  audience!: BroadcastAudience;
+
+  @ValidateIf((o) => o.audience === 'custom')
   @IsArray()
   @ArrayNotEmpty()
   @IsMongoId({ each: true })
-  userIds!: string[];
+  userIds?: string[];
 
-  @IsString()
-  @MinLength(2)
-  title!: string;
+  @IsOptional()
+  @IsIn(BROADCAST_TYPES as unknown as string[])
+  type?: NotificationType;
 
-  @IsString()
-  @MinLength(2)
-  body!: string;
+  @IsString() @MinLength(2) titleEn!: string;
+  @IsString() @MinLength(2) titleAr!: string;
+  @IsString() @MinLength(2) messageEn!: string;
+  @IsString() @MinLength(2) messageAr!: string;
 }
 
 @ApiTags('Notifications')
@@ -76,12 +96,21 @@ export class NotificationsController {
   @Permissions(PERMISSIONS.NOTIFICATIONS_SEND)
   @ResponseMessage('Announcement sent')
   async broadcast(@CurrentUser() actor: AuthenticatedUser, @Body() dto: BroadcastDto) {
-    const sent = await this.notificationsService.emitMany(
-      dto.userIds,
-      NotificationType.ANNOUNCEMENT,
-      { title: dto.title, body: dto.body },
+    const recipients = await this.notificationsService.resolveAudience(
+      dto.audience,
+      dto.userIds ?? [],
+    );
+    const sent = await this.notificationsService.emitBilingual(
+      recipients,
+      dto.type ?? NotificationType.ANNOUNCEMENT,
+      {
+        titleEn: dto.titleEn,
+        titleAr: dto.titleAr,
+        messageEn: dto.messageEn,
+        messageAr: dto.messageAr,
+      },
       actor.id,
     );
-    return { sent };
+    return { sent, audience: dto.audience };
   }
 }

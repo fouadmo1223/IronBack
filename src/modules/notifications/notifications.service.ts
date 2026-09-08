@@ -1,11 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
-import { NotificationType } from '../../common/enums';
+import { AccountType, NotificationType } from '../../common/enums';
 import { PaginatedResult } from '../../common/types';
 import { paginated } from '../../common/utils/pagination.util';
 import { renderNotification } from './notification-templates';
 import { Notification, NotificationDocument } from './schemas/notification.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
+
+export type BroadcastAudience = 'all' | 'members' | 'staff' | 'custom';
+
+export interface BilingualText {
+  titleAr: string;
+  titleEn: string;
+  messageAr: string;
+  messageEn: string;
+}
 
 export interface EmitInput {
   userId: string | Types.ObjectId;
@@ -22,7 +32,45 @@ export class NotificationsService {
   constructor(
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
   ) {}
+
+  /** Resolve a broadcast audience to a list of recipient user ids. */
+  async resolveAudience(
+    audience: BroadcastAudience,
+    customIds: string[] = [],
+  ): Promise<Types.ObjectId[]> {
+    if (audience === 'custom') return customIds.map((id) => new Types.ObjectId(id));
+    const filter: Record<string, unknown> = { isActive: true };
+    if (audience === 'members') filter.accountType = AccountType.MEMBER;
+    if (audience === 'staff') filter.accountType = AccountType.STAFF;
+    const rows = await this.userModel.find(filter).select('_id').lean().exec();
+    return rows.map((r) => r._id as Types.ObjectId);
+  }
+
+  /** Insert a ready-rendered bilingual notification for many users at once. */
+  async emitBilingual(
+    userIds: Array<string | Types.ObjectId>,
+    type: NotificationType,
+    text: BilingualText,
+    createdBy?: string,
+  ): Promise<number> {
+    if (userIds.length === 0) return 0;
+    const by = createdBy ? new Types.ObjectId(createdBy) : null;
+    const docs = userIds.map((uid) => ({
+      user: new Types.ObjectId(uid),
+      type,
+      titleAr: text.titleAr,
+      titleEn: text.titleEn,
+      messageAr: text.messageAr,
+      messageEn: text.messageEn,
+      metadata: { broadcast: true },
+      createdBy: by,
+    }));
+    const res = await this.notificationModel.insertMany(docs, { ordered: false });
+    return res.length;
+  }
 
   async emit(input: EmitInput, session?: ClientSession): Promise<void> {
     try {

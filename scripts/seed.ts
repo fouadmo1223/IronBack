@@ -385,7 +385,39 @@ async function run() {
     },
     { upsert: true },
   );
-  console.log('  · site + home + trainers');
+  for (const p of [
+    {
+      slug: 'about', nameEn: 'About', nameAr: 'عن النادي',
+      data: {
+        kickerEn: 'The gym', kickerAr: 'النادي',
+        titleEn: 'A training floor, not a lifestyle brand', titleAr: 'صالة تدريب، لا علامة أسلوب حياة',
+        bodyEn: 'We opened in 2014 with one idea — a serious floor without the fluff.',
+        bodyAr: 'افتتحنا عام ٢٠١٤ بفكرة واحدة — صالة جادة بلا زيادات.',
+      },
+    },
+    {
+      slug: 'facilities', nameEn: 'Facilities', nameAr: 'المرافق',
+      data: {
+        kickerEn: 'Facilities', kickerAr: 'المرافق',
+        titleEn: '900 square metres of iron', titleAr: '٩٠٠ متر مربع من الحديد',
+        bodyEn: 'One flagship floor, laid out for training — not for photos.',
+        bodyAr: 'صالة واحدة رئيسية، مُصمّمة للتدريب — لا للصور.',
+      },
+    },
+  ]) {
+    await cmsPageModel.findOneAndUpdate(
+      { slug: p.slug },
+      {
+        $set: {
+          slug: p.slug, nameEn: p.nameEn, nameAr: p.nameAr,
+          isPublished: true, publishedAt: new Date(),
+          sections: [{ key: 'intro', type: 'RICH_TEXT', enabled: true, order: 0, data: p.data }],
+        },
+      },
+      { upsert: true },
+    );
+  }
+  console.log('  · site + home + trainers + about + facilities');
 
   console.log('\n▸ Seeding demo member…');
   {

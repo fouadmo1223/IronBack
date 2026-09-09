@@ -191,6 +191,10 @@ export class MembersService {
       .findById(id)
       .populate('user', 'firstName lastName email phone language isActive lastLoginAt')
       .populate('primaryBranch', 'code nameAr nameEn')
+      .populate(
+        'currentSubscription',
+        'planNameAr planNameEn status startDate endDate finalPrice paidAmount remainingAmount',
+      )
       .exec();
     if (!doc) throw new NotFoundException('Member not found');
     return doc;

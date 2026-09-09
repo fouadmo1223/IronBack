@@ -27,9 +27,10 @@ export class CmsService {
       .lean<CmsPageDocument>()
       .exec();
     if (!page) throw new NotFoundException('Page not found');
-    page.sections = (page.sections ?? [])
-      .filter((s) => s.enabled)
-      .sort((a, b) => a.order - b.order);
+    // Return every section (including disabled) so the frontend can tell
+    // "hidden by the editor" apart from "never configured" and suppress the
+    // matching hard-coded section accordingly.
+    page.sections = (page.sections ?? []).slice().sort((a, b) => a.order - b.order);
     return page;
   }
 

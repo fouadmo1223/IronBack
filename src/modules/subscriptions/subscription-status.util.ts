@@ -31,11 +31,23 @@ export function resolveSubscription(
   }
 
   const msLeft = sub.endDate.getTime() - now.getTime();
-  const daysRemaining = Math.ceil(msLeft / DAY_MS);
 
-  if (daysRemaining <= 0) {
+  if (msLeft <= 0) {
     return { status: SubscriptionStatus.EXPIRED, daysRemaining: 0, isUsable: false };
   }
+
+  // Whole calendar days between today and the end date, so a 30-day sub that
+  // started yesterday reads "29 days" (not "30"), and the final partial day
+  // still reads "1" rather than "0" while it is genuinely usable.
+  const dayStart = (t: number) => {
+    const d = new Date(t);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  };
+  const daysRemaining = Math.max(
+    1,
+    Math.round((dayStart(sub.endDate.getTime()) - dayStart(now.getTime())) / DAY_MS),
+  );
+
   if (daysRemaining <= expiringSoonThresholdDays) {
     return { status: SubscriptionStatus.EXPIRING_SOON, daysRemaining, isUsable: true };
   }

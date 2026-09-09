@@ -1,7 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { ParseObjectIdPipe, Permissions, Public, ResponseMessage } from '../../common';
+import {
+  AllowAccountTypes,
+  ParseObjectIdPipe,
+  Permissions,
+  Public,
+  ResponseMessage,
+} from '../../common';
 import { PERMISSIONS } from '../../common/constants/permissions';
+import { AccountType } from '../../common/enums';
 import { CreateBranchDto, UpdateBranchDto } from './dto/branch.dto';
 import { BranchesService } from './branches.service';
 
@@ -17,9 +24,11 @@ export class BranchesController {
     return this.branchesService.findAll(false);
   }
 
+  // Any staff member needs the branch list for filters and assignment
+  // dropdowns; only mutations require BRANCH_MANAGE.
   @Get()
   @ApiBearerAuth()
-  @Permissions(PERMISSIONS.BRANCH_MANAGE)
+  @AllowAccountTypes(AccountType.STAFF)
   findAll() {
     return this.branchesService.findAll(true);
   }

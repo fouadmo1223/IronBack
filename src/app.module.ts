@@ -17,6 +17,7 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BranchesModule } from './modules/branches/branches.module';
 import { CmsModule } from './modules/cms/cms.module';
+import { ContactModule } from './modules/contact/contact.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
 import { MediaModule } from './modules/media/media.module';
@@ -84,6 +85,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     ReportsModule,
     CmsModule,
     SettingsModule,
+    ContactModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

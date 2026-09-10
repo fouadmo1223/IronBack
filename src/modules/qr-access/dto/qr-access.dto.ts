@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsInt, IsMongoId, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsMongoId, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class GenerateCardsDto {
   @ApiProperty({ minimum: 1, maximum: 200 })
@@ -25,4 +25,13 @@ export class AssignCardDto {
   @IsOptional()
   @IsString()
   token?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Replace the member's current credential: release a card back to the pool, delete a digital token, then assign this one.",
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  replace?: boolean;
 }

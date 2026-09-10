@@ -108,7 +108,7 @@ export class QrAccessController {
     @Body() dto: AssignCardDto,
   ) {
     return this.qrAccessService.assign(
-      { cardCode: dto.cardCode, token: dto.token, memberId: dto.memberId },
+      { cardCode: dto.cardCode, token: dto.token, memberId: dto.memberId, replace: dto.replace },
       actorFrom(user, req),
     );
   }

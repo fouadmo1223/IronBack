@@ -77,13 +77,31 @@ export class QrAccessService {
   /** True when the member currently holds a subscription that grants entry. */
   private async hasLiveSubscription(member: {
     _id: Types.ObjectId;
-    currentSubscription?: Types.ObjectId | null;
+    currentSubscription?: unknown;
   }): Promise<boolean> {
-    if (!member.currentSubscription) return false;
-    const sub = await this.subscriptionsService.findRawById(String(member.currentSubscription));
+    const cs = member.currentSubscription as
+      | { _id?: unknown; status?: string; endDate?: string | Date | null }
+      | Types.ObjectId
+      | string
+      | null
+      | undefined;
+    if (!cs) return false;
+
+    const isLive = (status: unknown, endDate: string | Date | null | undefined) => {
+      if (!LIVE_SUBSCRIPTION_STATUSES.includes(status as SubscriptionStatus)) return false;
+      return !endDate || new Date(endDate).getTime() > Date.now();
+    };
+
+    // Already populated (e.g. from getByIdOrFail) — no extra query needed.
+    if (typeof cs === 'object' && 'status' in cs && cs.status) {
+      return isLive(cs.status, cs.endDate);
+    }
+
+    const id =
+      typeof cs === 'object' && '_id' in cs && cs._id ? String(cs._id) : String(cs);
+    const sub = await this.subscriptionsService.findRawById(id);
     if (!sub) return false;
-    if (!LIVE_SUBSCRIPTION_STATUSES.includes(sub.status as SubscriptionStatus)) return false;
-    return !sub.endDate || sub.endDate.getTime() > Date.now();
+    return isLive(sub.status, sub.endDate);
   }
 
   /* ───────────────────────── Member-facing ───────────────────────── */
@@ -206,11 +224,7 @@ export class QrAccessService {
       doc = card;
       reused = true;
     } else {
-      doc = await this.createToken({
-        member: memberProfileId,
-        status: 'ASSIGNED',
-        isActive: true,
-      });
+      doc = await this.mintMemberToken(memberProfileId);
     }
 
     await this.membersService.setQrEnabled(memberProfileId, true);
@@ -225,12 +239,8 @@ export class QrAccessService {
   }
 
   async regenerate(memberProfileId: string, actor: Actor): Promise<QrPayload> {
-    await this.revokeActive(memberProfileId);
-    const doc = await this.createToken({
-      member: memberProfileId,
-      status: 'ASSIGNED',
-      isActive: true,
-    });
+    await this.discardActive(memberProfileId);
+    const doc = await this.mintMemberToken(memberProfileId);
     await this.membersService.setQrEnabled(memberProfileId, true);
     await this.auditLogsService.record({
       action: AuditAction.QR_REGENERATED,
@@ -269,6 +279,49 @@ export class QrAccessService {
       }
     }
     throw new Error('Could not allocate a unique card code');
+  }
+
+  /**
+   * Mint a fresh member-bound credential with an 8-char code, so every issued
+   * QR carries the same style of printed code (e.g. `ZRBQYWSV`) rather than
+   * falling back to the member code.
+   */
+  private async mintMemberToken(
+    memberProfileId: string | Types.ObjectId,
+  ): Promise<MemberAccessTokenDocument> {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        return await this.createToken({
+          member: memberProfileId,
+          cardCode: generateCardCode(8),
+          status: 'ASSIGNED',
+          isActive: true,
+        });
+      } catch (err) {
+        if ((err as { code?: number }).code === 11000) continue;
+        throw err;
+      }
+    }
+    throw new Error('Could not allocate a unique card code');
+  }
+
+  /**
+   * Drop every active credential a member holds (used when replacing it).
+   * Returns the codes that were removed, for the audit trail.
+   */
+  private async discardActive(
+    memberProfileId: string | Types.ObjectId,
+  ): Promise<string[]> {
+    const active = await this.tokenModel
+      .find({ member: memberProfileId, isActive: true })
+      .exec();
+    const removed = active.map((t) => t.cardCode ?? t.tokenHash.slice(0, 8));
+    if (active.length) {
+      await this.tokenModel.deleteMany({
+        _id: { $in: active.map((t) => t._id) },
+      });
+    }
+    return removed;
   }
 
   /** Pre-generate a batch of unassigned QR cards for printing. */
@@ -321,7 +374,7 @@ export class QrAccessService {
    * subscription) and to not already hold an active credential.
    */
   async assign(
-    input: { cardCode?: string; token?: string; memberId: string },
+    input: { cardCode?: string; token?: string; memberId: string; replace?: boolean },
     actor: Actor,
   ): Promise<QrPayload> {
     const claim: Record<string, unknown> = { status: 'UNASSIGNED', member: null };
@@ -339,10 +392,14 @@ export class QrAccessService {
     const existingActive = await this.tokenModel
       .findOne({ member: member._id, isActive: true })
       .exec();
-    if (existingActive) {
+    if (existingActive && !input.replace) {
       throw new BadRequestException(
         'This member already has an active QR. Release it before assigning a new card.',
       );
+    }
+    let replacedCodes: string[] = [];
+    if (existingActive && input.replace) {
+      replacedCodes = await this.discardActive(member._id);
     }
     if (!(await this.hasLiveSubscription(member))) {
       throw new BadRequestException(
@@ -376,7 +433,7 @@ export class QrAccessService {
       entityType: 'MemberProfile',
       entityId: member._id,
       actor,
-      metadata: { cardCode: card.cardCode },
+      metadata: { cardCode: card.cardCode, replaced: replacedCodes.length ? replacedCodes : undefined },
     });
     return this.payload(card);
   }

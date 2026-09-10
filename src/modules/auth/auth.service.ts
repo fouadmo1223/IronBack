@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -81,6 +82,9 @@ export class AuthService {
     const user = await this.usersService.findByEmailWithPassword(dto.email);
     if (!user || !(await verifyPassword(user.passwordHash, dto.password))) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+    if (user.isBanned) {
+      throw new ForbiddenException('Your account has been banned. Contact the gym for details.');
     }
     if (!user.isActive) {
       throw new UnauthorizedException('This account is disabled');

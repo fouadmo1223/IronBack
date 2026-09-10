@@ -66,6 +66,7 @@ const DENY_MESSAGES: Record<AccessDecision, string> = {
   [AccessDecision.DENIED_NO_MEMBERSHIP]: 'No active membership',
   [AccessDecision.DENIED_PENDING_PAYMENT]: 'Payment pending / under review',
   [AccessDecision.DENIED_DAILY_LIMIT]: "Daily check-in limit reached",
+  [AccessDecision.DENIED_BANNED]: 'This member is banned',
   [AccessDecision.ALREADY_CHECKED_IN]: 'Already checked in',
 };
 
@@ -113,6 +114,7 @@ export class AttendanceService {
       firstName: string;
       lastName: string;
       phone?: string;
+      isBanned?: boolean;
     };
 
     const [lastApproved, totalApprovedVisits, todayCheckIns] = await Promise.all([
@@ -142,6 +144,21 @@ export class AttendanceService {
       dailyCheckInLimit: member.dailyCheckInLimit ?? 0,
       todayCheckIns,
     };
+
+    // 1b. Banned members never enter, regardless of membership state.
+    if (user?.isBanned) {
+      return this.deny(
+        AccessDecision.DENIED_BANNED,
+        memberView,
+        null,
+        lastApproved?.checkInAt ?? null,
+        totalApprovedVisits,
+        args,
+        member._id,
+        branch,
+        now,
+      );
+    }
 
     // 2. Membership checks.
     const sub = await this.subscriptionsService.currentForMember(member._id);

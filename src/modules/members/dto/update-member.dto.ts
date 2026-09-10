@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -75,4 +76,12 @@ export class UpdateMemberProfileDto {
   @Min(0)
   @Max(50)
   dailyCheckInLimit?: number;
+}
+
+export class BanMemberDto {
+  @ApiPropertyOptional({ description: 'Reason shown in the audit trail' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }

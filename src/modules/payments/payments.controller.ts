@@ -178,14 +178,31 @@ export class PaymentsController {
 
   @Post(':id/refund')
   @Permissions(PERMISSIONS.PAYMENT_REFUND)
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['amount', 'date', 'method'],
+      properties: {
+        proof: { type: 'string', format: 'binary', description: 'Optional refund receipt image' },
+        amount: { type: 'number' },
+        date: { type: 'string', format: 'date' },
+        method: { type: 'string' },
+        reference: { type: 'string' },
+        note: { type: 'string' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('proof'))
   @ResponseMessage('Refund recorded')
   refund(
     @CurrentUser() user: AuthenticatedUser,
     @Req() req: Request,
     @Param('id', ParseObjectIdPipe) id: string,
+    @UploadedFile() proof: UploadFile | undefined,
     @Body() dto: RefundPaymentDto,
   ) {
-    return this.paymentsService.refund(id, dto, actorFrom(user, req));
+    return this.paymentsService.refund(id, dto, actorFrom(user, req), proof);
   }
 
   @Post(':id/notes')

@@ -93,6 +93,31 @@ export class UsersService {
     await this.userModel.updateOne({ _id: id }, { $set: { isActive } }).exec();
   }
 
+  async setBanned(
+    id: string | Types.ObjectId,
+    isBanned: boolean,
+    reason = '',
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.userModel
+      .updateOne(
+        { _id: id },
+        {
+          $set: {
+            isBanned,
+            bannedAt: isBanned ? new Date() : null,
+            banReason: isBanned ? reason : '',
+          },
+        },
+        { session },
+      )
+      .exec();
+  }
+
+  async deleteById(id: string | Types.ObjectId, session?: ClientSession): Promise<void> {
+    await this.userModel.deleteOne({ _id: id }, { session }).exec();
+  }
+
   async linkProfile(
     id: string | Types.ObjectId,
     field: 'staffProfile' | 'memberProfile',

@@ -1,15 +1,29 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, ClientSession, FilterQuery, Model, Types } from 'mongoose';
 import { AppConfig } from '../../config/configuration';
-import { AccountType, Language } from '../../common/enums';
+import { AccountType, AuditAction, Language } from '../../common/enums';
 import { PaginatedResult } from '../../common/types';
 import { buildSort, paginated } from '../../common/utils/pagination.util';
 import { generateCardCode, toObjectId } from '../../common/utils/token.util';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { UsersService } from '../users/users.service';
 import { SequenceService } from '../../database/sequence.service';
 import { MemberProfile, MemberProfileDocument } from './schemas/member-profile.schema';
+
+export interface MemberAdminActor {
+  id?: string;
+  label?: string;
+  ip?: string;
+  userAgent?: string;
+}
 
 /** End-of-day for an inclusive ISO date range bound. */
 function endOfDay(iso: string): Date {
@@ -49,11 +63,13 @@ export interface MemberListQuery {
 @Injectable()
 export class MembersService {
   private readonly codePrefix: string;
+  private readonly logger = new Logger(MembersService.name);
 
   constructor(
     @InjectModel(MemberProfile.name) private readonly memberModel: Model<MemberProfileDocument>,
     @InjectConnection() private readonly connection: Connection,
     private readonly usersService: UsersService,
+    private readonly auditLogsService: AuditLogsService,
     private readonly sequence: SequenceService,
     config: ConfigService<AppConfig, true>,
   ) {
@@ -193,7 +209,11 @@ export class MembersService {
     // Populate only refs that actually hold a valid ObjectId — legacy rows can
     // carry an empty string, which makes `.populate()` throw a CastError.
     const paths: Array<{ path: string; select: string }> = [
-      { path: 'user', select: 'firstName lastName email phone language isActive lastLoginAt' },
+      {
+        path: 'user',
+        select:
+          'firstName lastName email phone language isActive isBanned bannedAt banReason lastLoginAt',
+      },
     ];
     if (Types.ObjectId.isValid(doc.primaryBranch as Types.ObjectId)) {
       paths.push({ path: 'primaryBranch', select: 'code nameAr nameEn' });
@@ -240,7 +260,7 @@ export class MembersService {
       const [items, total] = await Promise.all([
         this.memberModel
           .find(filter)
-          .populate('user', 'firstName lastName email phone isActive')
+          .populate('user', 'firstName lastName email phone isActive isBanned')
           .populate('primaryBranch', 'code nameAr nameEn')
           .populate(
             'currentSubscription',
@@ -447,6 +467,131 @@ export class MembersService {
 
   async setQrEnabled(memberId: string | Types.ObjectId, enabled: boolean): Promise<void> {
     await this.memberModel.updateOne({ _id: memberId }, { $set: { qrEnabled: enabled } }).exec();
+  }
+
+  // ─────────────────────────── Ban / delete (admin) ───────────────────────────
+
+  /**
+   * Ban or lift the ban on a member. A banned member cannot log in, refresh a
+   * session, open the portal, or check in. Banning also kills existing sessions
+   * and turns their access QR off; un-banning leaves the QR off (staff re-enable
+   * it explicitly). Reversible — no data is removed.
+   */
+  async setBanned(
+    profileId: string | Types.ObjectId,
+    banned: boolean,
+    reason: string,
+    actor: MemberAdminActor,
+  ): Promise<MemberProfileDocument> {
+    const profile = await this.memberModel.findById(profileId).exec();
+    if (!profile) throw new NotFoundException('Member not found');
+
+    const user = await this.usersService.getByIdOrFail(profile.user);
+    if (user.isBanned === banned) {
+      throw new BadRequestException(
+        banned ? 'This member is already banned' : 'This member is not banned',
+      );
+    }
+
+    await this.usersService.setBanned(user._id, banned, reason);
+    if (banned) {
+      await this.setQrEnabled(profile._id, false);
+      await this.connection
+        .collection('refresh_tokens')
+        .updateMany(
+          { user: user._id, revokedAt: null },
+          { $set: { revokedAt: new Date() } },
+        );
+      await this.connection
+        .collection('member_access_tokens')
+        .updateMany(
+          { member: profile._id, isActive: true },
+          { $set: { isActive: false, revokedAt: new Date() } },
+        );
+    }
+
+    await this.auditLogsService.record({
+      action: banned ? AuditAction.MEMBER_BANNED : AuditAction.MEMBER_UNBANNED,
+      entityType: 'MemberProfile',
+      entityId: profile._id,
+      actor,
+      metadata: { memberCode: profile.memberCode, reason: banned ? reason : undefined },
+    });
+
+    return this.getByIdOrFail(profile._id);
+  }
+
+  /**
+   * Permanently delete a member and every record attached to them: the login,
+   * profile, subscriptions, payments (and proofs), attendance, freezes,
+   * notifications, notes and access credentials. Physical QR cards are returned
+   * to the unassigned pool; digital tokens are destroyed. Irreversible.
+   */
+  async deleteMember(
+    profileId: string | Types.ObjectId,
+    actor: MemberAdminActor,
+  ): Promise<{ deleted: true; memberCode: string; removed: Record<string, number> }> {
+    const profile = await this.memberModel.findById(profileId).exec();
+    if (!profile) throw new NotFoundException('Member not found');
+
+    const memberId = profile._id;
+    const userId = profile.user as Types.ObjectId;
+    const memberCode = profile.memberCode;
+    const db = this.connection;
+    const removed: Record<string, number> = {};
+
+    const wipe = async (
+      collection: string,
+      filter: Record<string, unknown>,
+    ): Promise<void> => {
+      const res = await db.collection(collection).deleteMany(filter);
+      removed[collection] = res.deletedCount ?? 0;
+    };
+
+    // Subscription ids first — freezes are keyed by subscription.
+    const subIds = (
+      await db
+        .collection('subscriptions')
+        .find({ member: memberId }, { projection: { _id: 1 } })
+        .toArray()
+    ).map((s) => s._id);
+
+    // Access credentials: pooled cards go back to the pool, digital tokens die.
+    const cardReset = await db.collection('member_access_tokens').updateMany(
+      { member: memberId, cardCode: { $ne: null } },
+      {
+        $set: { member: null, isActive: false, status: 'UNASSIGNED', revokedAt: null },
+      },
+    );
+    removed['member_access_tokens_returned_to_pool'] = cardReset.modifiedCount ?? 0;
+    await wipe('member_access_tokens', { member: memberId });
+
+    if (subIds.length) {
+      await wipe('subscription_freezes', { subscription: { $in: subIds } });
+    }
+    await wipe('subscription_freezes', { member: memberId });
+    await wipe('subscriptions', { member: memberId });
+    await wipe('payments', { member: memberId });
+    await wipe('attendance', { member: memberId });
+    await wipe('member_notes', { member: memberId });
+    await wipe('notifications', { user: userId });
+    await wipe('refresh_tokens', { user: userId });
+    await wipe('password_reset_tokens', { user: userId });
+    await wipe('member_profiles', { _id: memberId });
+    await wipe('users', { _id: userId });
+
+    await this.auditLogsService.record({
+      action: AuditAction.MEMBER_DELETED,
+      entityType: 'MemberProfile',
+      entityId: memberId,
+      actor,
+      metadata: { memberCode, userId: String(userId), removed },
+    });
+    this.logger.warn(
+      `Member ${memberCode} (${String(memberId)}) hard-deleted by ${actor.label ?? actor.id ?? 'unknown'}`,
+    );
+
+    return { deleted: true, memberCode, removed };
   }
 
   countAll(): Promise<number> {

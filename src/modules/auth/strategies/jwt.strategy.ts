@@ -32,6 +32,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Account not found or disabled');
     }
+    if (user.isBanned) {
+      throw new UnauthorizedException('Your account has been banned');
+    }
 
     const principal: AuthenticatedUser = {
       id: String(user._id),

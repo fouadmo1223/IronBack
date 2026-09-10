@@ -311,7 +311,12 @@ export class PaymentsService {
     return payment;
   }
 
-  async refund(paymentId: string, dto: RefundPaymentDto, actor: Actor): Promise<PaymentDocument> {
+  async refund(
+    paymentId: string,
+    dto: RefundPaymentDto,
+    actor: Actor,
+    proof?: UploadFile,
+  ): Promise<PaymentDocument> {
     const payment = await this.getByIdOrFail(paymentId);
     if (![PaymentStatus.APPROVED, PaymentStatus.REFUND_REQUESTED].includes(payment.status)) {
       throw new BadRequestException('This payment cannot be refunded in its current state');
@@ -319,6 +324,17 @@ export class PaymentsService {
     if (dto.amount > payment.amount) {
       throw new BadRequestException('Refund amount exceeds the original payment');
     }
+
+    let proofPublicId = '';
+    if (proof) {
+      const uploaded = await this.mediaService.uploadPrivate(
+        proof,
+        MediaFolder.PAYMENT_PROOFS,
+        String(payment.member),
+      );
+      proofPublicId = uploaded.publicId;
+    }
+
     payment.status = PaymentStatus.REFUNDED;
     payment.refundedAt = new Date();
     payment.refund = {
@@ -327,7 +343,7 @@ export class PaymentsService {
       method: dto.method,
       reference: dto.reference ?? '',
       note: dto.note ?? '',
-      proofPublicId: '',
+      proofPublicId,
       recordedBy: new Types.ObjectId(actor.id),
     };
     await payment.save();
@@ -433,7 +449,16 @@ export class PaymentsService {
       }
     }
 
-    return { payment, previousAttempts, auditHistory, signedProofUrl };
+    let signedRefundProofUrl: string | null = null;
+    if (payment.refund?.proofPublicId) {
+      try {
+        signedRefundProofUrl = this.mediaService.signedUrl(payment.refund.proofPublicId, 600);
+      } catch {
+        signedRefundProofUrl = null;
+      }
+    }
+
+    return { payment, previousAttempts, auditHistory, signedProofUrl, signedRefundProofUrl };
   }
 
   proofUrl(payment: PaymentDocument): string | null {

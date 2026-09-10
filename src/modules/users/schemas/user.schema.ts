@@ -31,6 +31,16 @@ export class User {
   @Prop({ default: true, index: true })
   isActive!: boolean;
 
+  /** Hard block set by an admin. A banned user cannot log in, refresh, or enter. */
+  @Prop({ default: false, index: true })
+  isBanned!: boolean;
+
+  @Prop({ type: Date, default: null })
+  bannedAt!: Date | null;
+
+  @Prop({ trim: true, default: '', maxlength: 500 })
+  banReason!: string;
+
   @Prop({ default: false })
   isVerified!: boolean;
 

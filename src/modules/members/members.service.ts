@@ -187,16 +187,29 @@ export class MembersService {
   }
 
   async getByIdOrFail(id: string | Types.ObjectId): Promise<MemberProfileDocument> {
-    const doc = await this.memberModel
-      .findById(id)
-      .populate('user', 'firstName lastName email phone language isActive lastLoginAt')
-      .populate('primaryBranch', 'code nameAr nameEn')
-      .populate(
-        'currentSubscription',
-        'planNameAr planNameEn status startDate endDate finalPrice paidAmount remainingAmount',
-      )
-      .exec();
+    const doc = await this.memberModel.findById(id).exec();
     if (!doc) throw new NotFoundException('Member not found');
+
+    // Populate only refs that actually hold a valid ObjectId — legacy rows can
+    // carry an empty string, which makes `.populate()` throw a CastError.
+    const paths: Array<{ path: string; select: string }> = [
+      { path: 'user', select: 'firstName lastName email phone language isActive lastLoginAt' },
+    ];
+    if (Types.ObjectId.isValid(doc.primaryBranch as Types.ObjectId)) {
+      paths.push({ path: 'primaryBranch', select: 'code nameAr nameEn' });
+    } else {
+      doc.primaryBranch = null;
+    }
+    if (Types.ObjectId.isValid(doc.currentSubscription as Types.ObjectId)) {
+      paths.push({
+        path: 'currentSubscription',
+        select:
+          'planNameAr planNameEn status startDate endDate finalPrice paidAmount remainingAmount',
+      });
+    } else {
+      doc.currentSubscription = null;
+    }
+    await doc.populate(paths);
     return doc;
   }
 

@@ -22,8 +22,11 @@ export class MemberAccessToken {
   member!: Types.ObjectId | null;
 
   /** Human-readable code printed on the physical card, e.g. "A7K2P9QX". */
-  @Prop({ type: String, default: null, unique: true, sparse: true, uppercase: true, trim: true })
-  cardCode!: string | null;
+  // No `default: null` — a digital (card-less) token must leave this field
+  // ABSENT so the sparse unique index skips it. Writing `null` would make every
+  // card-less token collide on the unique index.
+  @Prop({ type: String, unique: true, sparse: true, uppercase: true, trim: true })
+  cardCode?: string | null;
 
   /** UNASSIGNED = in the pool; ASSIGNED = bound to a member. */
   @Prop({ type: String, enum: ['UNASSIGNED', 'ASSIGNED'], default: 'ASSIGNED', index: true })

@@ -69,7 +69,7 @@ export class QrAccessService {
       token: doc.token,
       qrDataUrl: await this.render(doc.token),
       isActive: doc.isActive,
-      cardCode: doc.cardCode,
+      cardCode: doc.cardCode ?? null,
       updatedAt: (doc as unknown as { updatedAt: Date }).updatedAt,
     };
   }
@@ -88,18 +88,26 @@ export class QrAccessService {
 
   /* ───────────────────────── Member-facing ───────────────────────── */
 
-  /** The member's active credential, or 404 when they have none. Read-only. */
+  /**
+   * The member's active credential. Self-heals: if they have no token but a live
+   * subscription, one is issued now (covers members activated before auto-issue,
+   * or where the activation-time issue failed). 404 only when genuinely not
+   * entitled.
+   */
   async getForMemberProfile(memberProfileId: string | Types.ObjectId): Promise<QrPayload> {
     const doc = await this.tokenModel
       .findOne({ member: memberProfileId, isActive: true })
       .select('+token')
       .exec();
-    if (!doc) {
-      throw new NotFoundException(
-        'No access QR — it is issued when a subscription is activated or a card is assigned.',
-      );
+    if (doc) return this.payload(doc);
+
+    const member = await this.membersService.findRawById(memberProfileId);
+    if (member && (await this.hasLiveSubscription(member))) {
+      return this.ensureForMember(member._id, { label: 'System (self-heal)' });
     }
-    return this.payload(doc);
+    throw new NotFoundException(
+      'No access QR — it is issued when a subscription is activated or a card is assigned.',
+    );
   }
 
   async getForMemberUser(userId: string): Promise<QrPayload> {
@@ -132,15 +140,18 @@ export class QrAccessService {
     isActive: boolean;
   }): Promise<MemberAccessTokenDocument> {
     const raw = generateOpaqueToken(32);
+    const base: Record<string, unknown> = {
+      member: input.member ?? null,
+      status: input.status,
+      token: raw,
+      tokenHash: sha256(raw),
+      isActive: input.isActive,
+    };
+    // Only set cardCode when there is one — a card-less token must omit the
+    // field entirely so the sparse unique index does not treat many as dupes.
+    if (input.cardCode) base.cardCode = input.cardCode;
     const [doc] = await this.tokenModel.create([
-      {
-        member: input.member ?? null,
-        cardCode: input.cardCode ?? null,
-        status: input.status,
-        token: raw,
-        tokenHash: sha256(raw),
-        isActive: input.isActive,
-      },
+      base,
     ]);
     doc.token = raw;
     return doc;
